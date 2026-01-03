@@ -1,5 +1,7 @@
 package com.prokrastinatorji.core
 
+import kotlin.random.Random
+
 class GA(
     private val popSize: Int,
     private val cr: Double, //crossover
@@ -48,6 +50,13 @@ class GA(
                     }
                 }
             }
+
+            for (off in offspring) {
+                if (RandomUtils.nextDouble() < pm) {
+                    swapMutation(off)
+                }
+            }
+
             //TODO ovrednoti populacijo in shrani najboljšega (best)
             //implementacijo lahko naredimo bolj učinkovito tako, da overdnotimo samo tiste, ki so se spremenili (mutirani in križani potomci)
 
@@ -59,7 +68,22 @@ class GA(
     }
 
     private fun swapMutation(off: TSP.Tour) {
-        //TODO
+        val path = off.path
+        val size = path.size
+
+        if (size < 2) return
+
+        val index1 = RandomUtils.nextInt(size)
+        var index2 = RandomUtils.nextInt(size)
+        while (index1 == index2) {
+            index2 = RandomUtils.nextInt(size)
+        }
+
+        val tempCity = path[index1]
+        path[index1] = path[index2]
+        path[index2] = tempCity
+
+        off.distance = Double.MAX_VALUE
     }
 
     private fun pmx(parent1: TSP.Tour, parent2: TSP.Tour): Array<TSP.Tour> {
