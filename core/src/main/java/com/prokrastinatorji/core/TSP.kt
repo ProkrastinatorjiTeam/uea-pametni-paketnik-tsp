@@ -1,26 +1,58 @@
 package com.prokrastinatorji.core
 
 class TSP(
-    val name: String,
-    val cities: List<City>,
-    private val distanceMatrix: Array<DoubleArray>
+    path: String,
+    val maxEvaluations: Int
 ) {
-    val dimension: Int
-        get() = cities.size
+    enum class DistanceType { EUCLIDEAN, WEIGHTED }
 
-    fun getDistance(city1: City, city2: City): Double {
-        return distanceMatrix[city1.id - 1][city2.id - 1]
+    inner class City {
+        var id: Int = 0
+        var x: Double = 0.0
+        var y: Double = 0.0
     }
 
-    fun calculateDistance(tour: Tour): Double {
-        val cities = tour.cities
-        if (cities.isEmpty()) return 0.0
+    inner class Tour(val dimension: Int) {
+        var distance: Double = Double.MAX_VALUE
+        var path: Array<City> = Array(dimension) { City() }
 
-        var totalDistance = 0.0
-        for (i in 0 until cities.size - 1) {
-            totalDistance += getDistance(cities[i], cities[i + 1])
+        constructor(tour: Tour) : this(tour.dimension) {
+            this.distance = tour.distance
+            this.path = tour.path.clone()
         }
-        totalDistance += getDistance(cities.last(), cities.first())
-        return totalDistance
+
+        fun copy(): Tour {
+            return Tour(this)
+        }
+    }
+
+    var name: String? = null
+    lateinit var start: City
+    val cities = mutableListOf<City>()
+    var numberOfCities = 0
+    lateinit var weights: Array<DoubleArray>
+    var numberOfEvaluations = 0
+
+    init {
+        loadData(path)
+    }
+
+    fun evaluate(tour: Tour) {
+        //TODO
+        numberOfEvaluations++
+    }
+
+    private fun calculateDistance(from: City, to: City): Double {
+        //TODO
+        return 0.0
+    }
+
+    fun generateTour(): Tour {
+        //TODO
+        return Tour(numberOfCities)
+    }
+
+    private fun loadData(path: String) {
+        //TODO:
     }
 }
