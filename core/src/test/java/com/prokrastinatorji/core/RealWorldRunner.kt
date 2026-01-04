@@ -10,30 +10,25 @@ class RealWorldRunner {
         println("Loading Real World Problem from Direct4me.csv...")
         
         val realWorldTSP = RealWorldTSP()
-        // Load problem (uses Mock services by default)
-        val problem = realWorldTSP.loadProblemFromCsv("Direct4me.csv")
+        // Load problem (uses Real APIs if available in secrets.properties)
+        // Set useRealApis = true to attempt using Google Matrix and Nominatim
+        val problem = realWorldTSP.loadProblemFromCsv("Direct4me.csv", useRealApis = true)
         
         println("Problem loaded: ${problem.name}")
         println("Number of cities: ${problem.numberOfCities}")
         
-        val runs = 30 // Fewer runs for quick check
+        val runs = 5 // Fewer runs for quick check
         val popSize = 100
         val cr = 0.8
         val pm = 0.1
-        
-        // MaxFes = 1000 * d
-        // Note: problem.maxEvaluations is already set in loadProblemFromCsv
         
         println("Max Evaluations: ${problem.maxEvaluations}")
         
         val results = mutableListOf<Double>()
         
         for (i in 1..runs) {
-            // Reset problem state if needed (evaluations count)
+            // Reset problem state
             problem.numberOfEvaluations = 0
-            
-            // Randomize seed
-            // RandomUtils.setSeedFromTime() // See note in BenchmarkRunner about threading/static seed
             
             val ga = GA(popSize, cr, pm)
             val bestTour = ga.execute(problem)
@@ -46,7 +41,7 @@ class RealWorldRunner {
         val avg = results.average()
         
         println("--------------------------------------------------")
-        println("Real World Results (Mock Data):")
+        println("Real World Results:")
         println("Min Distance: $min meters")
         println("Avg Distance: $avg meters")
         println("--------------------------------------------------")
@@ -54,7 +49,7 @@ class RealWorldRunner {
         // Save to file
         val resultsDir = File("results")
         if (!resultsDir.exists()) resultsDir.mkdirs()
-        val outputFile = File(resultsDir, "Prokrastinatorji_Direct4me_Mock.txt")
+        val outputFile = File(resultsDir, "Prokrastinatorji_Direct4me.txt")
         outputFile.writeText(results.joinToString("\n"))
         println("Saved results to ${outputFile.absolutePath}")
     }

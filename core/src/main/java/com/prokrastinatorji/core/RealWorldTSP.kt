@@ -24,7 +24,8 @@ class RealWorldTSP {
     }
 
     interface DistanceMatrixService {
-        fun getDistance(from: Location, to: Location): Double
+        // Changed to return full matrix to allow batching
+        fun getFullMatrix(locations: List<Location>): Array<DoubleArray>
     }
 
     // --- Services ---
@@ -41,7 +42,7 @@ class RealWorldTSP {
             val url = "https://nominatim.openstreetmap.org/search?q=${address.replace(" ", "+")}&format=json&limit=1"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "UEA-Project-Student/1.0") // Required by Nominatim
+                .header("User-Agent", "UEA-Project-Student/1.0")
                 .build()
 
             try {
@@ -66,51 +67,101 @@ class RealWorldTSP {
         }
     }
 
-    // 2. Google Distance Matrix API
+    // 2. Google Distance Matrix API (Batched)
     class GoogleDistanceMatrixService(private val apiKey: String) : DistanceMatrixService {
         private val client = OkHttpClient()
         private val gson = Gson()
 
-        override fun getDistance(from: Location, to: Location): Double {
-            // Note: For 100x100, calling this one by one is inefficient and will hit rate limits.
-            // Ideally, we should batch requests (origins=A|B|C&destinations=D|E|F).
-            // But for simplicity in this assignment context, we'll implement single call logic
-            // and rely on the Caching wrapper to store it.
-            // WARNING: This will burn API quota fast. Use sparingly or implement batching.
+        override fun getFullMatrix(locations: List<Location>): Array<DoubleArray> {
+            val size = locations.size
+            val matrix = Array(size) { DoubleArray(size) }
             
-            // Fallback to Haversine if key is invalid or empty
-            if (apiKey.isBlank()) return HaversineDistanceService().getDistance(from, to)
-
-            val url = "https://maps.googleapis.com/maps/api/distancematrix/json" +
-                    "?origins=${from.lat},${from.lng}" +
-                    "&destinations=${to.lat},${to.lng}" +
-                    "&key=$apiKey"
-
-            val request = Request.Builder().url(url).build()
-
-            try {
-                client.newCall(request).execute().use { response ->
-                    val json = response.body?.string()
-                    // Parse JSON manually or with Gson to find rows[0].elements[0].distance.value
-                    // Simplified parsing:
-                    val map: Map<String, Any> = gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
-                    val rows = map["rows"] as? List<Map<String, Any>>
-                    val elements = rows?.get(0)?.get("elements") as? List<Map<String, Any>>
-                    val distanceObj = elements?.get(0)?.get("distance") as? Map<String, Any>
-                    val value = distanceObj?.get("value") as? Double // Meters
-
-                    if (value != null) return value
-                }
-            } catch (e: Exception) {
-                println("Error fetching distance: ${e.message}")
+            if (apiKey.isBlank()) {
+                println("WARNING: No Google API Key. Using Haversine.")
+                val haversine = HaversineDistanceService()
+                return haversine.getFullMatrix(locations)
             }
-            return HaversineDistanceService().getDistance(from, to) // Fallback
+
+            // Batch size: 10x10 = 100 elements (Google limit is 100 elements per request)
+            val batchSize = 10
+
+            for (i in 0 until size step batchSize) {
+                for (j in 0 until size step batchSize) {
+                    // Prepare batch
+                    val origins = locations.subList(i, min(i + batchSize, size))
+                    val destinations = locations.subList(j, min(j + batchSize, size))
+                    
+                    val originsStr = origins.joinToString("|") { "${it.lat},${it.lng}" }
+                    val destinationsStr = destinations.joinToString("|") { "${it.lat},${it.lng}" }
+
+                    val url = "https://maps.googleapis.com/maps/api/distancematrix/json" +
+                            "?origins=$originsStr" +
+                            "&destinations=$destinationsStr" +
+                            "&key=$apiKey"
+
+                    val request = Request.Builder().url(url).build()
+                    
+                    println("Fetching Matrix Batch: Origins $i..${i+origins.size-1}, Dest $j..${j+destinations.size-1}")
+
+                    try {
+                        client.newCall(request).execute().use { response ->
+                            val json = response.body?.string()
+                            val map: Map<String, Any> = gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
+                            
+                            val status = map["status"] as? String
+                            if (status != "OK") {
+                                println("API Error: $status. ${map["error_message"]}")
+                                // Fallback to Haversine for this batch?
+                                // For now, just leave 0.0 or implement fallback logic
+                                return@use
+                            }
+
+                            val rows = map["rows"] as? List<Map<String, Any>>
+                            
+                            rows?.forEachIndexed { rowIndex, rowMap ->
+                                val elements = rowMap["elements"] as? List<Map<String, Any>>
+                                elements?.forEachIndexed { colIndex, elementMap ->
+                                    val distanceObj = elementMap["distance"] as? Map<String, Any>
+                                    val value = distanceObj?.get("value") as? Double // Meters
+                                    
+                                    if (value != null) {
+                                        matrix[i + rowIndex][j + colIndex] = value
+                                    } else {
+                                        // Element status might be ZERO_RESULTS or NOT_FOUND
+                                        // Use Haversine fallback
+                                        matrix[i + rowIndex][j + colIndex] = HaversineDistanceService().calculate(
+                                            locations[i + rowIndex], locations[j + colIndex]
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        println("Error fetching batch: ${e.message}")
+                    }
+                    
+                    // Respect rate limits slightly
+                    Thread.sleep(100) 
+                }
+            }
+            return matrix
         }
     }
 
     // 3. Haversine (Fallback)
     class HaversineDistanceService : DistanceMatrixService {
-        override fun getDistance(from: Location, to: Location): Double {
+        override fun getFullMatrix(locations: List<Location>): Array<DoubleArray> {
+            val size = locations.size
+            val matrix = Array(size) { DoubleArray(size) }
+            for (i in 0 until size) {
+                for (j in 0 until size) {
+                    matrix[i][j] = calculate(locations[i], locations[j])
+                }
+            }
+            return matrix
+        }
+
+        fun calculate(from: Location, to: Location): Double {
             val R = 6371e3
             val phi1 = from.lat * PI / 180
             val phi2 = to.lat * PI / 180
@@ -139,7 +190,7 @@ class RealWorldTSP {
         val distancesFile = File(cacheDir, "distances.json")
         val gson = Gson()
 
-        // 1. Load Locations (from Cache or CSV+Geocode)
+        // 1. Load Locations
         val locations: MutableList<Location>
         if (locationsFile.exists()) {
             println("Loading locations from cache...")
@@ -159,12 +210,11 @@ class RealWorldTSP {
                 println("Done.")
             }
             
-            // Save to cache
             locationsFile.writeText(gson.toJson(locations))
             println("Locations saved to cache.")
         }
 
-        // 2. Load Distance Matrix (from Cache or API)
+        // 2. Load Distance Matrix
         val size = locations.size
         val weights: Array<DoubleArray>
 
@@ -173,7 +223,6 @@ class RealWorldTSP {
             weights = gson.fromJson(distancesFile.readText(), Array<DoubleArray>::class.java)
         } else {
             println("Cache not found. Calculating distances...")
-            weights = Array(size) { DoubleArray(size) }
             
             val apiKey = Secrets.getGoogleApiKey() ?: ""
             val distanceService = if (useRealApis && apiKey.isNotEmpty()) {
@@ -183,27 +232,8 @@ class RealWorldTSP {
                 HaversineDistanceService()
             }
 
-            // This is O(N^2). For 100 cities -> 10,000 calls.
-            // If using Google API, this is BAD without batching.
-            // For safety, if N > 10 and using Google, we should warn or fail.
-            // But for Haversine it's instant.
+            weights = distanceService.getFullMatrix(locations)
             
-            for (i in 0 until size) {
-                for (j in 0 until size) {
-                    if (i == j) {
-                        weights[i][j] = 0.0
-                    } else {
-                        // Optimization: Matrix is symmetric?
-                        // Real roads are NOT symmetric (one-way streets), but for approximation we often assume it.
-                        // The assignment says: "Asymmetric Traveling Salesman Problem - ATSP".
-                        // So we must calculate both directions.
-                        weights[i][j] = distanceService.getDistance(locations[i], locations[j])
-                    }
-                }
-                if (i % 10 == 0) println("Distance Matrix: Row $i/$size completed")
-            }
-            
-            // Save to cache
             distancesFile.writeText(gson.toJson(weights))
             println("Distance matrix saved to cache.")
         }
@@ -235,7 +265,6 @@ class RealWorldTSP {
         if (line != null && line.startsWith("Mesto")) line = reader.readLine()
 
         while (line != null) {
-            // Handle CSV parsing better (e.g. quotes) if needed, but simple split for now
             val parts = line.split(",")
             if (parts.size >= 2) {
                 val city = parts[0].trim()
@@ -249,7 +278,6 @@ class RealWorldTSP {
         return locations
     }
     
-    // Mock for fallback
     class MockGeocodingService : GeocodingService {
         override fun getCoordinates(address: String): Pair<Double, Double> {
             val lat = 45.4 + RandomUtils.nextDouble() * (46.9 - 45.4)
