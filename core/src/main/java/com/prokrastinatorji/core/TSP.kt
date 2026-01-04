@@ -49,7 +49,6 @@ class TSP(
     var numberOfEvaluations = 0
     var distanceType = DistanceType.EUCLIDEAN
 
-    // Constructor for file loading
     constructor(path: String, maxEvaluations: Int) : this(maxEvaluations) {
         loadData(path)
     }
@@ -59,7 +58,6 @@ class TSP(
         for (i in 0 until numberOfCities - 1) {
             dist += calculateDistance(tour.path[i], tour.path[i + 1])
         }
-        // Return to start
         dist += calculateDistance(tour.path[numberOfCities - 1], tour.path[0])
         
         tour.distance = dist
@@ -68,28 +66,22 @@ class TSP(
 
     private fun calculateDistance(from: City, to: City): Double {
         return if (distanceType == DistanceType.WEIGHTED && weights != null) {
-            // In .tsp files, indices are often 1-based.
-            // We assume the City ID corresponds to the index in the weights matrix + 1.
-            // So we subtract 1 to get 0-based array index.
             val i = from.id - 1
             val j = to.id - 1
             if (i in weights!!.indices && j in weights!!.indices) {
                 weights!![i][j]
             } else {
-                Double.MAX_VALUE // Error fallback
+                Double.MAX_VALUE
             }
         } else {
-            // Euclidean
             sqrt((from.x - to.x).pow(2) + (from.y - to.y).pow(2))
         }
     }
 
     fun generateTour(): Tour {
         val tour = Tour(numberOfCities)
-        // Create a shuffled list of cities
         val shuffledCities = cities.toMutableList()
-        
-        // Fisher-Yates shuffle using RandomUtils
+
         for (i in shuffledCities.size - 1 downTo 1) {
             val j = RandomUtils.nextInt(i + 1)
             val temp = shuffledCities[i]
@@ -109,14 +101,12 @@ class TSP(
         var line = reader.readLine()
         var readingCoords = false
         var readingWeights = false
-        
-        // Temporary buffer for matrix reading
+
         val matrixValues = mutableListOf<Double>()
 
         while (line != null) {
             val trimmed = line.trim()
-            
-            // Check for section headers or EOF
+
             if (trimmed == "NODE_COORD_SECTION") {
                 readingCoords = true
                 readingWeights = false
@@ -128,14 +118,12 @@ class TSP(
                 line = reader.readLine()
                 continue
             } else if (trimmed == "DISPLAY_DATA_SECTION" || trimmed == "EOF") {
-                // Stop reading data
                 readingCoords = false
                 readingWeights = false
                 break
             }
 
             if (!readingCoords && !readingWeights) {
-                // Header parsing
                 when {
                     trimmed.startsWith("NAME") -> name = trimmed.substringAfter(":").trim()
                     trimmed.startsWith("DIMENSION") -> numberOfCities = trimmed.substringAfter(":").trim().toInt()
@@ -149,7 +137,6 @@ class TSP(
                     }
                 }
             } else if (readingCoords) {
-                // Parse City: ID X Y
                 val parts = trimmed.split("\\s+".toRegex()).filter { it.isNotEmpty() }
                 if (parts.size >= 3) {
                     try {
@@ -158,19 +145,15 @@ class TSP(
                         val y = parts[2].toDouble()
                         cities.add(City(id, x, y))
                     } catch (e: NumberFormatException) {
-                        // Ignore lines that don't parse (safety)
                     }
                 }
             } else if (readingWeights) {
-                // Parse Matrix
                 val tokenizer = StringTokenizer(trimmed)
                 while (tokenizer.hasMoreTokens()) {
                     val token = tokenizer.nextToken()
                     try {
                         matrixValues.add(token.toDouble())
                     } catch (e: NumberFormatException) {
-                        // If we hit a non-number token while reading weights, it might be the start of a new section
-                        // e.g. "DISPLAY_DATA_SECTION"
                         if (token == "DISPLAY_DATA_SECTION" || token == "EOF") {
                             readingWeights = false
                             break
@@ -181,10 +164,8 @@ class TSP(
 
             line = reader.readLine()
         }
-        
-        // Post-processing
+
         if (distanceType == DistanceType.WEIGHTED) {
-            // Convert flat list to 2D array
             weights = Array(numberOfCities) { DoubleArray(numberOfCities) }
             var index = 0
             for (i in 0 until numberOfCities) {
@@ -194,7 +175,6 @@ class TSP(
                     }
                 }
             }
-            // Create dummy cities for weighted graph if they weren't loaded
             if (cities.isEmpty()) {
                 for (i in 1..numberOfCities) {
                     cities.add(City(i, 0.0, 0.0))

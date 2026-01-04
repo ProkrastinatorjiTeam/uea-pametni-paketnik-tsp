@@ -24,21 +24,15 @@ class RealWorldTSP {
     }
 
     interface DistanceMatrixService {
-        // Changed to return full matrix to allow batching
         fun getFullMatrix(locations: List<Location>): Array<DoubleArray>
     }
 
-    // --- Services ---
-
-    // 1. Nominatim (OpenStreetMap) - Free, No Key
     class NominatimGeocodingService : GeocodingService {
         private val client = OkHttpClient()
         private val gson = Gson()
 
         override fun getCoordinates(address: String): Pair<Double, Double> {
-            // Respect usage policy: Max 1 request per second
             Thread.sleep(1100)
-
             val url = "https://nominatim.openstreetmap.org/search?q=${address.replace(" ", "+")}&format=json&limit=1"
             val request = Request.Builder()
                 .url(url)
@@ -67,7 +61,7 @@ class RealWorldTSP {
         }
     }
 
-    // 2. Google Distance Matrix API (Batched)
+
     class GoogleDistanceMatrixService(private val apiKey: String) : DistanceMatrixService {
         private val client = OkHttpClient()
         private val gson = Gson()
@@ -82,12 +76,10 @@ class RealWorldTSP {
                 return haversine.getFullMatrix(locations)
             }
 
-            // Batch size: 10x10 = 100 elements (Google limit is 100 elements per request)
             val batchSize = 10
 
             for (i in 0 until size step batchSize) {
                 for (j in 0 until size step batchSize) {
-                    // Prepare batch
                     val origins = locations.subList(i, min(i + batchSize, size))
                     val destinations = locations.subList(j, min(j + batchSize, size))
                     
@@ -111,8 +103,6 @@ class RealWorldTSP {
                             val status = map["status"] as? String
                             if (status != "OK") {
                                 println("API Error: $status. ${map["error_message"]}")
-                                // Fallback to Haversine for this batch?
-                                // For now, just leave 0.0 or implement fallback logic
                                 return@use
                             }
 
@@ -127,8 +117,6 @@ class RealWorldTSP {
                                     if (value != null) {
                                         matrix[i + rowIndex][j + colIndex] = value
                                     } else {
-                                        // Element status might be ZERO_RESULTS or NOT_FOUND
-                                        // Use Haversine fallback
                                         matrix[i + rowIndex][j + colIndex] = HaversineDistanceService().calculate(
                                             locations[i + rowIndex], locations[j + colIndex]
                                         )
@@ -139,8 +127,6 @@ class RealWorldTSP {
                     } catch (e: Exception) {
                         println("Error fetching batch: ${e.message}")
                     }
-                    
-                    // Respect rate limits slightly
                     Thread.sleep(100) 
                 }
             }
@@ -148,7 +134,6 @@ class RealWorldTSP {
         }
     }
 
-    // 3. Haversine (Fallback)
     class HaversineDistanceService : DistanceMatrixService {
         override fun getFullMatrix(locations: List<Location>): Array<DoubleArray> {
             val size = locations.size
@@ -177,8 +162,6 @@ class RealWorldTSP {
         }
     }
 
-    // --- Caching Logic ---
-
     fun loadProblemFromCsv(
         csvPath: String,
         useRealApis: Boolean = false
@@ -190,7 +173,6 @@ class RealWorldTSP {
         val distancesFile = File(cacheDir, "distances.json")
         val gson = Gson()
 
-        // 1. Load Locations
         val locations: MutableList<Location>
         if (locationsFile.exists()) {
             println("Loading locations from cache...")
@@ -214,7 +196,6 @@ class RealWorldTSP {
             println("Locations saved to cache.")
         }
 
-        // 2. Load Distance Matrix
         val size = locations.size
         val weights: Array<DoubleArray>
 
@@ -238,7 +219,6 @@ class RealWorldTSP {
             println("Distance matrix saved to cache.")
         }
 
-        // 3. Create TSP Object
         val tsp = TSP(1000 * size)
         tsp.name = "Direct4Me Real World"
         tsp.numberOfCities = size
