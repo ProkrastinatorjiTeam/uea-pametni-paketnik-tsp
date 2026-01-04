@@ -115,24 +115,37 @@ class GA(
             cut2 = temp
         }
 
+        // Copy cut section
         for (i in cut1..cut2) {
             child1Path[i] = p1Path[i]
             child2Path[i] = p2Path[i]
         }
 
+        // Create lookup maps for the cut section to speed up conflict checks
+        // Map: City -> Index in the cut
+        val child1CutMap = HashMap<TSP.City, Int>()
+        val child2CutMap = HashMap<TSP.City, Int>()
+
+        for (i in cut1..cut2) {
+            child1CutMap[child1Path[i]!!] = i
+            child2CutMap[child2Path[i]!!] = i
+        }
+
         for (i in 0 until size) {
             if (i < cut1 || i > cut2) {
+                // Child 1
                 var cityFromP2 = p2Path[i]
-                while (child1Path.contains(cityFromP2)) {
-                    val indexInChild = child1Path.indexOf(cityFromP2)
-                    cityFromP2 = p2Path[indexInChild]
+                while (child1CutMap.containsKey(cityFromP2)) {
+                    val indexInCut = child1CutMap[cityFromP2]!!
+                    cityFromP2 = p2Path[indexInCut]
                 }
                 child1Path[i] = cityFromP2
 
+                // Child 2
                 var cityFromP1 = p1Path[i]
-                while (child2Path.contains(cityFromP1)) {
-                    val indexInChild = child2Path.indexOf(cityFromP1)
-                    cityFromP1 = p1Path[indexInChild]
+                while (child2CutMap.containsKey(cityFromP1)) {
+                    val indexInCut = child2CutMap[cityFromP1]!!
+                    cityFromP1 = p1Path[indexInCut]
                 }
                 child2Path[i] = cityFromP1
             }
