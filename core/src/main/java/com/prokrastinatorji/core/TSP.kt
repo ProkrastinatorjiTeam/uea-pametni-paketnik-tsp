@@ -10,6 +10,16 @@ class TSP(
         var id: Int = 0
         var x: Double = 0.0
         var y: Double = 0.0
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is City) return false
+            return id == other.id
+        }
+
+        override fun hashCode(): Int {
+            return id
+        }
     }
 
     inner class Tour(val dimension: Int) {
@@ -32,6 +42,27 @@ class TSP(
     var numberOfCities = 0
     lateinit var weights: Array<DoubleArray>
     var numberOfEvaluations = 0
+
+    //samo za testiranje(lahko izbrises)
+    constructor(dimension: Int, testMode: Boolean = true) : this("", 0) {
+        if (testMode) {
+            this.numberOfCities = dimension
+            this.name = "TestProblem"
+            for (i in 0 until dimension) {
+                val city = City()
+                city.id = i
+                city.x = 0.0
+                city.y = 0.0
+                this.cities.add(city)
+            }
+        }
+    }
+    fun createOrderedTourForTest(): Tour {
+        val tour = Tour(numberOfCities)
+        tour.path = cities.toTypedArray()
+        return tour
+    }
+    //konec stvari za testiranje
 
     init {
         loadData(path)
