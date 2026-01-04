@@ -10,6 +10,16 @@ class TSP(
         var id: Int = 0
         var x: Double = 0.0
         var y: Double = 0.0
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is City) return false
+            return id == other.id
+        }
+
+        override fun hashCode(): Int {
+            return id
+        }
     }
 
     inner class Tour(val dimension: Int) {
