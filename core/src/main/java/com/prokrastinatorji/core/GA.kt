@@ -1,7 +1,5 @@
 package com.prokrastinatorji.core
 
-import kotlin.random.Random
-
 class GA(
     private val popSize: Int,
     private val cr: Double, //crossover
@@ -24,7 +22,9 @@ class GA(
             problem.evaluate(newTour)
             population.add(newTour)
 
-            //TODO: shrani najboljšega
+            if (best == null || newTour.distance < best.distance) {
+                best = newTour.copy()
+            }
         }
 
         //GLAVNA ZANKA
@@ -38,7 +38,10 @@ class GA(
             while (offspring.size < popSize) {
                 val parent1 = tournamentSelection()
                 var parent2 = tournamentSelection()
-                //TODO: preveri, da starša nista enaka
+
+                while (parent1 === parent2) {
+                    parent2 = tournamentSelection()
+                }
 
                 if (RandomUtils.nextDouble() < cr) {
                     val children = pmx(parent1, parent2)
@@ -60,8 +63,14 @@ class GA(
                 }
             }
 
-            //TODO ovrednoti populacijo in shrani najboljšega (best)
-            //implementacijo lahko naredimo bolj učinkovito tako, da overdnotimo samo tiste, ki so se spremenili (mutirani in križani potomci)
+            for (tour in offspring) {
+                if (tour.distance == Double.MAX_VALUE) {
+                    problem.evaluate(tour)
+                }
+                if (tour.distance < best!!.distance) {
+                    best = tour.copy()
+                }
+            }
 
             population = offspring.toMutableList()
             offspring.clear()
@@ -70,7 +79,7 @@ class GA(
         return best!!
     }
 
-    fun swapMutation(off: TSP.Tour) {
+    private fun swapMutation(off: TSP.Tour) {
         val path = off.path
         val size = path.size
 
@@ -89,7 +98,7 @@ class GA(
         off.distance = Double.MAX_VALUE
     }
 
-    fun pmx(parent1: TSP.Tour, parent2: TSP.Tour): Array<TSP.Tour> {
+    private fun pmx(parent1: TSP.Tour, parent2: TSP.Tour): Array<TSP.Tour> {
         val size = parent1.dimension
         val p1Path = parent1.path
         val p2Path = parent2.path
@@ -97,12 +106,9 @@ class GA(
         val child1Path = Array<TSP.City?>(size) { null }
         val child2Path = Array<TSP.City?>(size) { null }
 
-        //var cut1 = RandomUtils.nextInt(size)
-        //var cut2 = RandomUtils.nextInt(size)
+        var cut1 = RandomUtils.nextInt(size)
+        var cut2 = RandomUtils.nextInt(size)
 
-        //fiksno sam za test
-        var cut1 = 3
-        var cut2 = 6
         if (cut1 > cut2) {
             val temp = cut1
             cut1 = cut2
@@ -142,7 +148,7 @@ class GA(
         return arrayOf(child1, child2)
     }
 
-    fun tournamentSelection(tournamentSize: Int = 2): TSP.Tour {
+    private fun tournamentSelection(tournamentSize: Int = 2): TSP.Tour {
         val selectedIndices = mutableSetOf<Int>()
         while (selectedIndices.size < tournamentSize) {
             selectedIndices.add(RandomUtils.nextInt(population.size))
