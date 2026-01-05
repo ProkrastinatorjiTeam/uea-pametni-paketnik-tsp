@@ -2,6 +2,7 @@ package com.prokrastinatorji.core
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.BufferedReader
@@ -10,6 +11,8 @@ import java.io.InputStreamReader
 import kotlin.math.*
 
 class RealWorldTSP {
+
+    enum class Metric { DISTANCE, TIME }
 
     data class Location(
         val name: String,
@@ -20,64 +23,74 @@ class RealWorldTSP {
     )
 
     interface GeocodingService {
-        fun getCoordinates(address: String): Pair<Double, Double>
+        fun getCoordinates(address: String, city: String): Pair<Double, Double>
     }
 
     interface DistanceMatrixService {
-        fun getFullMatrix(locations: List<Location>): Array<DoubleArray>
+        fun getFullMatrices(locations: List<Location>): Pair<Array<DoubleArray>, Array<DoubleArray>>
     }
 
-    class NominatimGeocodingService : GeocodingService {
+    class GoogleGeocodingService(private val apiKey: String) : GeocodingService {
         private val client = OkHttpClient()
         private val gson = Gson()
 
-        override fun getCoordinates(address: String): Pair<Double, Double> {
-            Thread.sleep(1100)
-            val url = "https://nominatim.openstreetmap.org/search?q=${address.replace(" ", "+")}&format=json&limit=1"
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", "UEA-Project-Student/1.0")
+        override fun getCoordinates(address: String, city: String): Pair<Double, Double> {
+            if (apiKey.isBlank()) return Pair(0.0, 0.0)
+
+            var coords = fetch(address)
+            if (coords.first == 0.0 && coords.second == 0.0) {
+                println("Geocoding fallback for '$address' -> '$city, Slovenia'")
+                coords = fetch("$city, Slovenia")
+            }
+            return coords
+        }
+
+        private fun fetch(query: String): Pair<Double, Double> {
+            Thread.sleep(50)
+            val url = "https://maps.googleapis.com/maps/api/geocode/json".toHttpUrl().newBuilder()
+                .addQueryParameter("address", query)
+                .addQueryParameter("key", apiKey)
                 .build()
 
+            val request = Request.Builder().url(url).build()
             try {
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw Exception("Unexpected code $response")
-
                     val json = response.body?.string()
-                    val listType = object : TypeToken<List<Map<String, Any>>>() {}.type
-                    val results: List<Map<String, Any>> = gson.fromJson(json, listType)
-
-                    if (results.isNotEmpty()) {
-                        val lat = results[0]["lat"].toString().toDouble()
-                        val lon = results[0]["lon"].toString().toDouble()
-                        println("Geocoded: $address -> $lat, $lon")
-                        return Pair(lat, lon)
+                    val result = gson.fromJson(json, GeocodingResult::class.java)
+                    if (result.status == "OK" && result.results.isNotEmpty()) {
+                        val location = result.results[0].geometry.location
+                        println("Geocoded: $query -> ${location.lat}, ${location.lng}")
+                        return Pair(location.lat, location.lng)
+                    } else {
+                        println("Geocoding failed for '$query': ${result.status}")
                     }
                 }
             } catch (e: Exception) {
-                println("Error geocoding $address: ${e.message}")
+                println("Error geocoding '$query': ${e.message}")
             }
-            return Pair(0.0, 0.0) // Failed
+            return Pair(0.0, 0.0)
         }
-    }
 
+        data class GeocodingResult(val results: List<Result>, val status: String)
+        data class Result(val geometry: Geometry)
+        data class Geometry(val location: LatLng)
+        data class LatLng(val lat: Double, val lng: Double)
+    }
 
     class GoogleDistanceMatrixService(private val apiKey: String) : DistanceMatrixService {
         private val client = OkHttpClient()
         private val gson = Gson()
 
-        override fun getFullMatrix(locations: List<Location>): Array<DoubleArray> {
+        override fun getFullMatrices(locations: List<Location>): Pair<Array<DoubleArray>, Array<DoubleArray>> {
             val size = locations.size
-            val matrix = Array(size) { DoubleArray(size) }
+            val distMatrix = Array(size) { DoubleArray(size) }
+            val durMatrix = Array(size) { DoubleArray(size) }
             
             if (apiKey.isBlank()) {
-                println("WARNING: No Google API Key. Using Haversine.")
-                val haversine = HaversineDistanceService()
-                return haversine.getFullMatrix(locations)
+                return HaversineDistanceService().getFullMatrices(locations)
             }
 
             val batchSize = 10
-
             for (i in 0 until size step batchSize) {
                 for (j in 0 until size step batchSize) {
                     val origins = locations.subList(i, min(i + batchSize, size))
@@ -86,64 +99,66 @@ class RealWorldTSP {
                     val originsStr = origins.joinToString("|") { "${it.lat},${it.lng}" }
                     val destinationsStr = destinations.joinToString("|") { "${it.lat},${it.lng}" }
 
-                    val url = "https://maps.googleapis.com/maps/api/distancematrix/json" +
-                            "?origins=$originsStr" +
-                            "&destinations=$destinationsStr" +
-                            "&key=$apiKey"
+                    val url = "https://maps.googleapis.com/maps/api/distancematrix/json".toHttpUrl().newBuilder()
+                            .addQueryParameter("origins", originsStr)
+                            .addQueryParameter("destinations", destinationsStr)
+                            .addQueryParameter("key", apiKey).build()
 
-                    val request = Request.Builder().url(url).build()
-                    
                     println("Fetching Matrix Batch: Origins $i..${i+origins.size-1}, Dest $j..${j+destinations.size-1}")
-
+                    var batchSuccess = false
                     try {
-                        client.newCall(request).execute().use { response ->
-                            val json = response.body?.string()
-                            val map: Map<String, Any> = gson.fromJson(json, object : TypeToken<Map<String, Any>>() {}.type)
-                            
-                            val status = map["status"] as? String
-                            if (status != "OK") {
-                                println("API Error: $status. ${map["error_message"]}")
-                                return@use
-                            }
-
-                            val rows = map["rows"] as? List<Map<String, Any>>
-                            
-                            rows?.forEachIndexed { rowIndex, rowMap ->
-                                val elements = rowMap["elements"] as? List<Map<String, Any>>
-                                elements?.forEachIndexed { colIndex, elementMap ->
-                                    val distanceObj = elementMap["distance"] as? Map<String, Any>
-                                    val value = distanceObj?.get("value") as? Double // Meters
-                                    
-                                    if (value != null) {
-                                        matrix[i + rowIndex][j + colIndex] = value
-                                    } else {
-                                        matrix[i + rowIndex][j + colIndex] = HaversineDistanceService().calculate(
-                                            locations[i + rowIndex], locations[j + colIndex]
-                                        )
+                        client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                            val result: DistanceMatrixResult = gson.fromJson(response.body?.string(), DistanceMatrixResult::class.java)
+                            if (result.status == "OK") {
+                                result.rows.forEachIndexed { rowIndex, row ->
+                                    row.elements.forEachIndexed { colIndex, element ->
+                                        distMatrix[i + rowIndex][j + colIndex] = element.distance?.value?.toDouble() ?: 0.0
+                                        durMatrix[i + rowIndex][j + colIndex] = element.duration?.value?.toDouble() ?: 0.0
                                     }
                                 }
+                                batchSuccess = true
+                            } else {
+                                println("API Error: ${result.status}. ${result.error_message}")
                             }
                         }
                     } catch (e: Exception) {
                         println("Error fetching batch: ${e.message}")
                     }
-                    Thread.sleep(100) 
+                    if (!batchSuccess) {
+                        println("Batch failed. Running fallback for this batch.")
+                        for (rowIndex in origins.indices) {
+                            for (colIndex in destinations.indices) {
+                                val dist = HaversineDistanceService().calculate(locations[i + rowIndex], locations[j + colIndex])
+                                distMatrix[i + rowIndex][j + colIndex] = dist
+                                durMatrix[i + rowIndex][j + colIndex] = dist / 16.6
+                            }
+                        }
+                    }
                 }
             }
-            return matrix
+            return Pair(distMatrix, durMatrix)
         }
+
+        data class DistanceMatrixResult(val rows: List<Row>, val status: String, val error_message: String?)
+        data class Row(val elements: List<Element>)
+        data class Element(val distance: Value?, val duration: Value?, val status: String)
+        data class Value(val value: Int)
     }
 
     class HaversineDistanceService : DistanceMatrixService {
-        override fun getFullMatrix(locations: List<Location>): Array<DoubleArray> {
+        override fun getFullMatrices(locations: List<Location>): Pair<Array<DoubleArray>, Array<DoubleArray>> {
             val size = locations.size
-            val matrix = Array(size) { DoubleArray(size) }
+            val distMatrix = Array(size) { DoubleArray(size) }
+            val durMatrix = Array(size) { DoubleArray(size) }
+            
             for (i in 0 until size) {
                 for (j in 0 until size) {
-                    matrix[i][j] = calculate(locations[i], locations[j])
+                    val dist = calculate(locations[i], locations[j])
+                    distMatrix[i][j] = dist
+                    durMatrix[i][j] = dist / 16.66
                 }
             }
-            return matrix
+            return Pair(distMatrix, durMatrix)
         }
 
         fun calculate(from: Location, to: Location): Double {
@@ -153,43 +168,44 @@ class RealWorldTSP {
             val deltaPhi = (to.lat - from.lat) * PI / 180
             val deltaLambda = (to.lng - from.lng) * PI / 180
 
-            val a = sin(deltaPhi / 2).pow(2) +
-                    cos(phi1) * cos(phi2) *
-                    sin(deltaLambda / 2).pow(2)
-            val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-
-            return R * c
+            val a = sin(deltaPhi / 2).pow(2) + cos(phi1) * cos(phi2) * sin(deltaLambda / 2).pow(2)
+            return R * (2 * atan2(sqrt(a), sqrt(1 - a)))
         }
     }
 
     fun loadProblemFromCsv(
         csvPath: String,
-        useRealApis: Boolean = false
+        useRealApis: Boolean = false,
+        metric: Metric = Metric.DISTANCE
     ): TSP {
         val cacheDir = File("cache")
         if (!cacheDir.exists()) cacheDir.mkdirs()
 
         val locationsFile = File(cacheDir, "locations.json")
         val distancesFile = File(cacheDir, "distances.json")
+        val durationsFile = File(cacheDir, "durations.json")
         val gson = Gson()
 
         val locations: MutableList<Location>
         if (locationsFile.exists()) {
             println("Loading locations from cache...")
-            val type = object : TypeToken<List<Location>>() {}.type
-            locations = gson.fromJson(locationsFile.readText(), type)
+            locations = gson.fromJson(locationsFile.readText(), object : TypeToken<List<Location>>() {}.type)
         } else {
             println("Cache not found. Parsing CSV and Geocoding...")
             locations = parseCsv(csvPath)
-            
-            val geocoder = if (useRealApis) NominatimGeocodingService() else MockGeocodingService()
+            val apiKey = Secrets.getGoogleApiKey() ?: ""
+            val geocoder = if (useRealApis && apiKey.isNotEmpty()) GoogleGeocodingService(apiKey) else MockGeocodingService()
             
             locations.forEachIndexed { index, loc ->
-                print("Geocoding ${index + 1}/${locations.size}: ${loc.address}... ")
-                val coords = geocoder.getCoordinates(loc.address)
+                val coords = geocoder.getCoordinates(loc.address, loc.name)
                 loc.lat = coords.first
                 loc.lng = coords.second
-                println("Done.")
+                
+                if (loc.lat == 0.0 && loc.lng == 0.0) {
+                    println("  WARNING: Failed to geocode ${loc.address}. Setting to Ljubljana default.")
+                    loc.lat = 46.056947
+                    loc.lng = 14.505751
+                }
             }
             
             locationsFile.writeText(gson.toJson(locations))
@@ -197,26 +213,26 @@ class RealWorldTSP {
         }
 
         val size = locations.size
-        val weights: Array<DoubleArray>
+        var distMatrix: Array<DoubleArray>?
+        var durMatrix: Array<DoubleArray>?
 
-        if (distancesFile.exists()) {
-            println("Loading distance matrix from cache...")
-            weights = gson.fromJson(distancesFile.readText(), Array<DoubleArray>::class.java)
+        if (distancesFile.exists() && durationsFile.exists()) {
+            println("Loading matrices from cache...")
+            distMatrix = gson.fromJson(distancesFile.readText(), Array<DoubleArray>::class.java)
+            durMatrix = gson.fromJson(durationsFile.readText(), Array<DoubleArray>::class.java)
         } else {
-            println("Cache not found. Calculating distances...")
+            println("Cache not found. Calculating matrices...")
             
             val apiKey = Secrets.getGoogleApiKey() ?: ""
-            val distanceService = if (useRealApis && apiKey.isNotEmpty()) {
-                GoogleDistanceMatrixService(apiKey)
-            } else {
-                if (useRealApis) println("WARNING: No Google API Key found. Using Haversine.")
-                HaversineDistanceService()
-            }
+            val matrixService = if (useRealApis && apiKey.isNotEmpty()) GoogleDistanceMatrixService(apiKey) else HaversineDistanceService()
 
-            weights = distanceService.getFullMatrix(locations)
+            val matrices = matrixService.getFullMatrices(locations)
+            distMatrix = matrices.first
+            durMatrix = matrices.second
             
-            distancesFile.writeText(gson.toJson(weights))
-            println("Distance matrix saved to cache.")
+            distancesFile.writeText(gson.toJson(distMatrix))
+            durationsFile.writeText(gson.toJson(durMatrix))
+            println("Matrices saved to cache.")
         }
 
         val tsp = TSP(1000 * size)
@@ -229,7 +245,8 @@ class RealWorldTSP {
         }
         
         if (tsp.cities.isNotEmpty()) tsp.start = tsp.cities[0]
-        tsp.weights = weights
+
+        tsp.weights = if (metric == Metric.DISTANCE) distMatrix else durMatrix
         tsp.distanceType = TSP.DistanceType.WEIGHTED
         
         return tsp
@@ -259,7 +276,7 @@ class RealWorldTSP {
     }
     
     class MockGeocodingService : GeocodingService {
-        override fun getCoordinates(address: String): Pair<Double, Double> {
+        override fun getCoordinates(address: String, city: String): Pair<Double, Double> {
             val lat = 45.4 + RandomUtils.nextDouble() * (46.9 - 45.4)
             val lng = 13.3 + RandomUtils.nextDouble() * (16.6 - 13.3)
             return Pair(lat, lng)

@@ -15,7 +15,7 @@ class RealWorldRunner {
         println("Problem loaded: ${problem.name}")
         println("Number of cities: ${problem.numberOfCities}")
         
-        val runs = 5
+        val runs = 30
         val popSize = 100
         val cr = 0.8
         val pm = 0.1
