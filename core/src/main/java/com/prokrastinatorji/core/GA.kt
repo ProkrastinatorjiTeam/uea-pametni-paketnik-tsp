@@ -108,47 +108,34 @@ class GA(
 
         var cut1 = RandomUtils.nextInt(size)
         var cut2 = RandomUtils.nextInt(size)
-
         if (cut1 > cut2) {
-            val temp = cut1
-            cut1 = cut2
-            cut2 = temp
+            val temp = cut1; cut1 = cut2; cut2 = temp
         }
 
-        // Copy cut section
         for (i in cut1..cut2) {
             child1Path[i] = p1Path[i]
             child2Path[i] = p2Path[i]
         }
 
-        // Create lookup maps for the cut section to speed up conflict checks
-        // Map: City -> Index in the cut
-        val child1CutMap = HashMap<TSP.City, Int>()
-        val child2CutMap = HashMap<TSP.City, Int>()
-
-        for (i in cut1..cut2) {
-            child1CutMap[child1Path[i]!!] = i
-            child2CutMap[child2Path[i]!!] = i
-        }
-
         for (i in 0 until size) {
-            if (i < cut1 || i > cut2) {
-                // Child 1
-                var cityFromP2 = p2Path[i]
-                while (child1CutMap.containsKey(cityFromP2)) {
-                    val indexInCut = child1CutMap[cityFromP2]!!
-                    cityFromP2 = p2Path[indexInCut]
-                }
-                child1Path[i] = cityFromP2
+            if (i >= cut1 && i <= cut2) continue
 
-                // Child 2
-                var cityFromP1 = p1Path[i]
-                while (child2CutMap.containsKey(cityFromP1)) {
-                    val indexInCut = child2CutMap[cityFromP1]!!
-                    cityFromP1 = p1Path[indexInCut]
-                }
-                child2Path[i] = cityFromP1
+            //Potomec 1
+            var cityToInsert = p2Path[i]
+            while (child1Path.slice(cut1..cut2).contains(cityToInsert)) {
+                val indexInP1 = p1Path.indexOfFirst { it.id == cityToInsert.id }
+
+                cityToInsert = p2Path[indexInP1]
             }
+            child1Path[i] = cityToInsert
+
+            //Potomec 2
+            cityToInsert = p1Path[i]
+            while (child2Path.slice(cut1..cut2).contains(cityToInsert)) {
+                val indexInP2 = p2Path.indexOfFirst { it.id == cityToInsert.id }
+                cityToInsert = p1Path[indexInP2]
+            }
+            child2Path[i] = cityToInsert
         }
 
         val child1 = problem.Tour(size)
@@ -156,7 +143,6 @@ class GA(
 
         val child2 = problem.Tour(size)
         child2.path = child2Path.map { it!! }.toTypedArray()
-
 
         return arrayOf(child1, child2)
     }
@@ -176,13 +162,5 @@ class GA(
         }
 
         return bestContestant!!
-    }
-
-    fun setPopulationForTesting(testPopulation: MutableList<TSP.Tour>) {
-        this.population = testPopulation
-    }
-
-    fun setProblemForTesting(testProblem: TSP) {
-        this.problem = testProblem
     }
 }
