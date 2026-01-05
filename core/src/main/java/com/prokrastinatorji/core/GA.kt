@@ -108,11 +108,8 @@ class GA(
 
         var cut1 = RandomUtils.nextInt(size)
         var cut2 = RandomUtils.nextInt(size)
-
         if (cut1 > cut2) {
-            val temp = cut1
-            cut1 = cut2
-            cut2 = temp
+            val temp = cut1; cut1 = cut2; cut2 = temp
         }
 
         for (i in cut1..cut2) {
@@ -121,21 +118,24 @@ class GA(
         }
 
         for (i in 0 until size) {
-            if (i < cut1 || i > cut2) {
-                var cityFromP2 = p2Path[i]
-                while (child1Path.contains(cityFromP2)) {
-                    val indexInChild = child1Path.indexOf(cityFromP2)
-                    cityFromP2 = p2Path[indexInChild]
-                }
-                child1Path[i] = cityFromP2
+            if (i >= cut1 && i <= cut2) continue
 
-                var cityFromP1 = p1Path[i]
-                while (child2Path.contains(cityFromP1)) {
-                    val indexInChild = child2Path.indexOf(cityFromP1)
-                    cityFromP1 = p1Path[indexInChild]
-                }
-                child2Path[i] = cityFromP1
+            //Potomec 1
+            var cityToInsert = p2Path[i]
+            while (child1Path.slice(cut1..cut2).contains(cityToInsert)) {
+                val indexInP1 = p1Path.indexOfFirst { it.id == cityToInsert.id }
+
+                cityToInsert = p2Path[indexInP1]
             }
+            child1Path[i] = cityToInsert
+
+            //Potomec 2
+            cityToInsert = p1Path[i]
+            while (child2Path.slice(cut1..cut2).contains(cityToInsert)) {
+                val indexInP2 = p2Path.indexOfFirst { it.id == cityToInsert.id }
+                cityToInsert = p1Path[indexInP2]
+            }
+            child2Path[i] = cityToInsert
         }
 
         val child1 = problem.Tour(size)
@@ -143,7 +143,6 @@ class GA(
 
         val child2 = problem.Tour(size)
         child2.path = child2Path.map { it!! }.toTypedArray()
-
 
         return arrayOf(child1, child2)
     }
@@ -163,13 +162,5 @@ class GA(
         }
 
         return bestContestant!!
-    }
-
-    fun setPopulationForTesting(testPopulation: MutableList<TSP.Tour>) {
-        this.population = testPopulation
-    }
-
-    fun setProblemForTesting(testProblem: TSP) {
-        this.problem = testProblem
     }
 }
