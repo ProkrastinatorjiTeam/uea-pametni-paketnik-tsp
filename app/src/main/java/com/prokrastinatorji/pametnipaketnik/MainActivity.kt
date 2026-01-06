@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
+import android.widget.RadioButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -28,19 +29,23 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Initialize views
         recyclerViewCities = findViewById(R.id.recyclerViewCities)
         progressBar = findViewById(R.id.progressBar)
         val buttonStart = findViewById<Button>(R.id.buttonStart)
         val editTextPopulationSize = findViewById<TextInputEditText>(R.id.editTextPopulationSize)
         val editTextCrossover = findViewById<TextInputEditText>(R.id.editTextCrossover)
         val editTextMutation = findViewById<TextInputEditText>(R.id.editTextMutation)
+        val radioTime = findViewById<RadioButton>(R.id.radioButtonTime)
 
 
+        // Setup RecyclerView
         recyclerViewCities.layoutManager = LinearLayoutManager(this)
         cities.addAll(getDummyCities())
         cityAdapter = CityAdapter(cities)
         recyclerViewCities.adapter = cityAdapter
 
+        // Set button click listener
         buttonStart.setOnClickListener {
             val selectedCities = cities.filter { it.isSelected }
             if (selectedCities.isEmpty()) {
@@ -51,20 +56,21 @@ class MainActivity : AppCompatActivity() {
             val populationSize = editTextPopulationSize.text.toString().toIntOrNull() ?: 100
             val crossoverProbability = editTextCrossover.text.toString().toDoubleOrNull() ?: 0.8
             val mutationProbability = editTextMutation.text.toString().toDoubleOrNull() ?: 0.1
+            val isOptimizingTime = radioTime.isChecked
 
+            // Show progress bar and start algorithm in background
             progressBar.visibility = View.VISIBLE
             buttonStart.isEnabled = false
 
             lifecycleScope.launch(Dispatchers.IO) {
                 // --- Real algorithm execution ---
-                
+
                 // 1. Manually create and configure the TSP problem
                 val tspProblem = TSP()
                 tspProblem.maxEvaluations = 1000 * selectedCities.size
                 tspProblem.numberOfCities = selectedCities.size
                 tspProblem.distanceType = TSP.DistanceType.EUCLIDEAN
-                
-                // Convert app-level City to core-level TSP.City and add to problem
+
                 selectedCities.forEachIndexed { index, appCity ->
                     val coreCity = TSP.City(
                         id = index + 1,
@@ -89,12 +95,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 // --- End of real execution ---
 
+                // Switch back to the main thread to update UI
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
                     buttonStart.isEnabled = true
 
+                    // Start MapActivity with the optimized route and result
                     val intent = Intent(this@MainActivity, MapActivity::class.java).apply {
                         putParcelableArrayListExtra("optimized_route", ArrayList(optimizedRoute))
+                        putExtra("total_distance", resultTour.distance)
+                        putExtra("is_time_optimization", isOptimizingTime)
                     }
                     startActivity(intent)
                 }
