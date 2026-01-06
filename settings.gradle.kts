@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 rootProject.name = "PametniPaketnikTSP"
 include(":app")
 include(":core")
+include(":visualizer")

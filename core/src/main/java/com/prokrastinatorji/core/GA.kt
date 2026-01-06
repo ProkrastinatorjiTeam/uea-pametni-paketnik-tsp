@@ -1,5 +1,7 @@
 package com.prokrastinatorji.core
 
+typealias NewBestTourListener = (TSP.Tour) -> Unit
+
 class GA(
     private val popSize: Int,
     private val cr: Double, //crossover
@@ -8,6 +10,12 @@ class GA(
     private lateinit var population: MutableList<TSP.Tour>
     private lateinit var offspring: MutableList<TSP.Tour>
     private lateinit var problem: TSP
+
+    private var newBestTourListener: NewBestTourListener? = null
+
+    fun setNewBestTourListener(listener: NewBestTourListener) {
+        this.newBestTourListener = listener
+    }
 
     fun execute(problem: TSP): TSP.Tour {
         this.problem = problem
@@ -24,6 +32,8 @@ class GA(
 
             if (best == null || newTour.distance < best.distance) {
                 best = newTour.copy()
+
+                newBestTourListener?.invoke(best)
             }
         }
 
@@ -69,6 +79,8 @@ class GA(
                 }
                 if (tour.distance < best!!.distance) {
                     best = tour.copy()
+
+                    newBestTourListener?.invoke(best)
                 }
             }
 
