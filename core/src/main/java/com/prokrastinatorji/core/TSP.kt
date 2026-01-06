@@ -59,7 +59,7 @@ class TSP(
             dist += calculateDistance(tour.path[i], tour.path[i + 1])
         }
         dist += calculateDistance(tour.path[numberOfCities - 1], tour.path[0])
-        
+
         tour.distance = dist
         numberOfEvaluations++
     }
@@ -101,8 +101,10 @@ class TSP(
         var line = reader.readLine()
         var readingCoords = false
         var readingWeights = false
+        var readingDisplayData = false
 
         val matrixValues = mutableListOf<Double>()
+        var dimensionRead = false
 
         while (line != null) {
             val trimmed = line.trim()
@@ -110,23 +112,42 @@ class TSP(
             if (trimmed == "NODE_COORD_SECTION") {
                 readingCoords = true
                 readingWeights = false
+                readingDisplayData = false
                 line = reader.readLine()
                 continue
             } else if (trimmed == "EDGE_WEIGHT_SECTION") {
                 readingWeights = true
                 readingCoords = false
+                readingDisplayData = false
                 line = reader.readLine()
                 continue
-            } else if (trimmed == "DISPLAY_DATA_SECTION" || trimmed == "EOF") {
+            } else if (trimmed == "DISPLAY_DATA_SECTION") {
+                readingDisplayData = true
                 readingCoords = false
                 readingWeights = false
+                line = reader.readLine()
+                continue
+            } else if (trimmed == "EOF") {
+                readingCoords = false
+                readingWeights = false
+                readingDisplayData = false
                 break
             }
 
-            if (!readingCoords && !readingWeights) {
+            if (!readingCoords && !readingWeights && !readingDisplayData) {
                 when {
                     trimmed.startsWith("NAME") -> name = trimmed.substringAfter(":").trim()
-                    trimmed.startsWith("DIMENSION") -> numberOfCities = trimmed.substringAfter(":").trim().toInt()
+                    trimmed.startsWith("DIMENSION") -> {
+                        numberOfCities = trimmed.substringAfter(":").trim().toInt()
+
+                        if (cities.isEmpty()) {
+                            for (i in 1..numberOfCities) {
+                                cities.add(City(i, 0.0, 0.0))
+                            }
+                        }
+                        dimensionRead = true
+                    }
+
                     trimmed.startsWith("EDGE_WEIGHT_TYPE") -> {
                         val type = trimmed.substringAfter(":").trim()
                         if (type == "EXPLICIT") {
@@ -143,7 +164,12 @@ class TSP(
                         val id = parts[0].toInt()
                         val x = parts[1].toDouble()
                         val y = parts[2].toDouble()
-                        cities.add(City(id, x, y))
+
+                        val cityToUpdate = cities.find { it.id == id }
+                        cityToUpdate?.let {
+                            it.x = x
+                            it.y = y
+                        }
                     } catch (e: NumberFormatException) {
                     }
                 }
@@ -158,6 +184,22 @@ class TSP(
                             readingWeights = false
                             break
                         }
+                    }
+                }
+            } else if (readingDisplayData) {
+                val parts = trimmed.split("\\s+".toRegex()).filter { it.isNotEmpty() }
+                if (parts.size >= 3) {
+                    try {
+                        val id = parts[0].toInt()
+                        val x = parts[1].toDouble()
+                        val y = parts[2].toDouble()
+
+                        val cityToUpdate = cities.find { it.id == id }
+                        cityToUpdate?.let {
+                            it.x = x
+                            it.y = y
+                        }
+                    } catch (e: NumberFormatException) {
                     }
                 }
             }
@@ -175,11 +217,12 @@ class TSP(
                     }
                 }
             }
+            /*
             if (cities.isEmpty()) {
                 for (i in 1..numberOfCities) {
                     cities.add(City(i, 0.0, 0.0))
                 }
-            }
+            }*/
         }
 
         if (cities.isNotEmpty()) {
