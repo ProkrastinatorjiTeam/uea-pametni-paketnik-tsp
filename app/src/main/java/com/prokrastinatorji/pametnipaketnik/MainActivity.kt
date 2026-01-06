@@ -1,5 +1,6 @@
 package com.prokrastinatorji.pametnipaketnik
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.Toast
@@ -28,37 +29,38 @@ class MainActivity : AppCompatActivity() {
 
         // Setup RecyclerView
         recyclerViewCities.layoutManager = LinearLayoutManager(this)
-        // TODO: Load real city data
         cities.addAll(getDummyCities())
         cityAdapter = CityAdapter(cities)
         recyclerViewCities.adapter = cityAdapter
 
         // Set button click listener
         buttonStart.setOnClickListener {
-            val selectedCities = cities.filter { it.isSelected }
+            val selectedCities = ArrayList(cities.filter { it.isSelected })
+            if (selectedCities.isEmpty()) {
+                Toast.makeText(this, "Izberite vsaj eno mesto.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
             val populationSize = editTextPopulationSize.text.toString().toIntOrNull() ?: 100
             val crossoverProbability = editTextCrossover.text.toString().toDoubleOrNull() ?: 0.8
             val mutationProbability = editTextMutation.text.toString().toDoubleOrNull() ?: 0.1
 
-            val message = "Zagnan algoritem z ${selectedCities.size} mesti.\n" +
-                          "Populacija: $populationSize, Križanje: $crossoverProbability, Mutacija: $mutationProbability"
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-
-            // TODO: Start the genetic algorithm
+            // Start MapActivity
+            val intent = Intent(this, MapActivity::class.java).apply {
+                putParcelableArrayListExtra("selected_cities", selectedCities)
+            }
+            startActivity(intent)
         }
     }
 
     // Replace with real data loading
     private fun getDummyCities(): List<City> {
         return listOf(
-            City("Ljubljana"),
-            City("Maribor"),
-            City("Celje"),
-            City("Kranj"),
-            City("Koper"),
-            City("Novo mesto"),
-            City("Velenje"),
-            City("Murska Sobota")
+            City("Ljubljana", 46.0569, 14.5058),
+            City("Maribor", 46.5547, 15.6467),
+            City("Celje", 46.2389, 15.2674),
+            City("Kranj", 46.2389, 14.3556),
+            City("Koper", 45.5469, 13.7295)
         )
     }
 }
