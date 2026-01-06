@@ -3,13 +3,15 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 plugins {
     kotlin("jvm")
     id("org.jetbrains.compose") version "1.7.0"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.0.0"
 }
 dependencies {
     implementation(project(":core"))
 
     // Odvisnosti za Compose Desktop
     implementation(compose.desktop.currentOs)
+
+    implementation("org.jetbrains.compose.material3:material3-desktop:1.6.10")
 }
 java {
     sourceCompatibility = JavaVersion.VERSION_11
