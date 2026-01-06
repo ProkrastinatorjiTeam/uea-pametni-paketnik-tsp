@@ -30,7 +30,7 @@ class GA(
             problem.evaluate(newTour)
             population.add(newTour)
 
-            if (best == null || newTour.distance < best.distance) {
+            if (best == null || newTour.distance < best!!.distance) {
                 best = newTour.copy()
 
                 newBestTourListener?.invoke(best)
@@ -150,10 +150,10 @@ class GA(
             child2Path[i] = cityToInsert
         }
 
-        val child1 = problem.Tour(size)
+        val child1 = TSP.Tour(size)
         child1.path = child1Path.map { it!! }.toTypedArray()
 
-        val child2 = problem.Tour(size)
+        val child2 = TSP.Tour(size)
         child2.path = child2Path.map { it!! }.toTypedArray()
 
         return arrayOf(child1, child2)

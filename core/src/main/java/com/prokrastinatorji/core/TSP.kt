@@ -7,18 +7,18 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 class TSP(
-    val maxEvaluations: Int
+    var maxEvaluations: Int
 ) {
     enum class DistanceType { EUCLIDEAN, WEIGHTED }
 
-    inner class City(
+    class City(
         var id: Int = 0,
         var x: Double = 0.0,
         var y: Double = 0.0
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
-            if (other !is City) return false
+            if (other !is com.prokrastinatorji.core.TSP.City) return false
             return id == other.id
         }
 
@@ -27,7 +27,7 @@ class TSP(
         }
     }
 
-    inner class Tour(val dimension: Int) {
+    class Tour(val dimension: Int) {
         var distance: Double = Double.MAX_VALUE
         var path: Array<City> = Array(dimension) { City() }
 
@@ -42,12 +42,14 @@ class TSP(
     }
 
     var name: String? = null
-    lateinit var start: City
+    var start: City? = null
     val cities = mutableListOf<City>()
     var numberOfCities = 0
     var weights: Array<DoubleArray>? = null
     var numberOfEvaluations = 0
     var distanceType = DistanceType.EUCLIDEAN
+
+    constructor() : this(0)
 
     constructor(path: String, maxEvaluations: Int) : this(maxEvaluations) {
         loadData(path)
@@ -104,7 +106,6 @@ class TSP(
         var readingDisplayData = false
 
         val matrixValues = mutableListOf<Double>()
-        var dimensionRead = false
 
         while (line != null) {
             val trimmed = line.trim()
@@ -139,15 +140,12 @@ class TSP(
                     trimmed.startsWith("NAME") -> name = trimmed.substringAfter(":").trim()
                     trimmed.startsWith("DIMENSION") -> {
                         numberOfCities = trimmed.substringAfter(":").trim().toInt()
-
                         if (cities.isEmpty()) {
                             for (i in 1..numberOfCities) {
                                 cities.add(City(i, 0.0, 0.0))
                             }
                         }
-                        dimensionRead = true
                     }
-
                     trimmed.startsWith("EDGE_WEIGHT_TYPE") -> {
                         val type = trimmed.substringAfter(":").trim()
                         if (type == "EXPLICIT") {
@@ -164,27 +162,15 @@ class TSP(
                         val id = parts[0].toInt()
                         val x = parts[1].toDouble()
                         val y = parts[2].toDouble()
-
-                        val cityToUpdate = cities.find { it.id == id }
-                        cityToUpdate?.let {
-                            it.x = x
-                            it.y = y
-                        }
-                    } catch (e: NumberFormatException) {
-                    }
+                        cities.find { it.id == id }?.let { it.x = x; it.y = y }
+                    } catch (e: NumberFormatException) {}
                 }
             } else if (readingWeights) {
                 val tokenizer = StringTokenizer(trimmed)
                 while (tokenizer.hasMoreTokens()) {
-                    val token = tokenizer.nextToken()
                     try {
-                        matrixValues.add(token.toDouble())
-                    } catch (e: NumberFormatException) {
-                        if (token == "DISPLAY_DATA_SECTION" || token == "EOF") {
-                            readingWeights = false
-                            break
-                        }
-                    }
+                        matrixValues.add(tokenizer.nextToken().toDouble())
+                    } catch (e: NumberFormatException) {}
                 }
             } else if (readingDisplayData) {
                 val parts = trimmed.split("\\s+".toRegex()).filter { it.isNotEmpty() }
@@ -193,17 +179,10 @@ class TSP(
                         val id = parts[0].toInt()
                         val x = parts[1].toDouble()
                         val y = parts[2].toDouble()
-
-                        val cityToUpdate = cities.find { it.id == id }
-                        cityToUpdate?.let {
-                            it.x = x
-                            it.y = y
-                        }
-                    } catch (e: NumberFormatException) {
-                    }
+                        cities.find { it.id == id }?.let { it.x = x; it.y = y }
+                    } catch (e: NumberFormatException) {}
                 }
             }
-
             line = reader.readLine()
         }
 
@@ -217,14 +196,9 @@ class TSP(
                     }
                 }
             }
-            /*
-            if (cities.isEmpty()) {
-                for (i in 1..numberOfCities) {
-                    cities.add(City(i, 0.0, 0.0))
-                }
-            }*/
         }
 
+        // Added check for empty list as suggested
         if (cities.isNotEmpty()) {
             start = cities[0]
         }

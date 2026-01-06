@@ -231,7 +231,7 @@ class RealWorldTSP {
             durMatrix = matrices.second
             
             distancesFile.writeText(gson.toJson(distMatrix))
-            durationsFile.writeText(gson.toJson(durMatrix))
+            durationsFile.writeText(gson.toJson(durationsFile))
             println("Matrices saved to cache.")
         }
 
@@ -241,7 +241,7 @@ class RealWorldTSP {
         tsp.cities.clear()
         
         locations.forEachIndexed { index, loc ->
-            tsp.cities.add(tsp.City(index + 1, loc.lat, loc.lng))
+            tsp.cities.add(TSP.City(index + 1, loc.lat, loc.lng))
         }
         
         if (tsp.cities.isNotEmpty()) tsp.start = tsp.cities[0]
