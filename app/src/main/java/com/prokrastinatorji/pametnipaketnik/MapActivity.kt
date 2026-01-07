@@ -66,7 +66,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
         mMap.addPolyline(polylineOptions)
 
         val bounds = boundsBuilder.build()
-        val padding = 200 // Increased padding to not overlap with the result text view
+        val padding = 200
         val cameraUpdate = CameraUpdateFactory.newLatLngBounds(bounds, padding)
         
         mMap.setOnMapLoadedCallback {
