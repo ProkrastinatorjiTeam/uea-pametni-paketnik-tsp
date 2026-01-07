@@ -5,17 +5,19 @@ import java.util.Properties
 
 object Secrets {
     private val properties = Properties()
+    private var isLoaded = false
 
-    init {
+    fun loadFromInputStream(inputStream: InputStream?) {
+        if (isLoaded) return
         try {
-            val inputStream: InputStream? = javaClass.classLoader?.getResourceAsStream("secrets.properties")
             if (inputStream != null) {
                 properties.load(inputStream)
+                isLoaded = true
             } else {
-                println("WARNING: secrets.properties not found. API calls requiring keys will fail.")
+                println("WARNING: InputStream for secrets is null. API calls requiring keys will fail.")
             }
         } catch (e: Exception) {
-            println("ERROR: Could not load secrets.properties. ${e.message}")
+            println("ERROR: Could not load secrets from InputStream. ${e.message}")
         }
     }
 

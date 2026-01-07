@@ -34,6 +34,10 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    buildTypes.getByName("release") {
+        isMinifyEnabled = false
+        proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+    }
 }
 
 dependencies {
@@ -51,6 +55,9 @@ dependencies {
 
     // Google Maps
     implementation("com.google.android.gms:play-services-maps:18.2.0")
+
+    // Gson for JSON parsing
+    implementation("com.google.code.gson:gson:2.10.1")
 
     // Testing
     testImplementation(libs.junit)

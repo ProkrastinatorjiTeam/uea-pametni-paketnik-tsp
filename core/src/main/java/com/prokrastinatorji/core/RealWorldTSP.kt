@@ -195,19 +195,19 @@ class RealWorldTSP {
             locations = parseCsv(csvPath)
             val apiKey = Secrets.getGoogleApiKey() ?: ""
             val geocoder = if (useRealApis && apiKey.isNotEmpty()) GoogleGeocodingService(apiKey) else MockGeocodingService()
-            
+
             locations.forEachIndexed { index, loc ->
                 val coords = geocoder.getCoordinates(loc.address, loc.name)
                 loc.lat = coords.first
                 loc.lng = coords.second
-                
+
                 if (loc.lat == 0.0 && loc.lng == 0.0) {
                     println("  WARNING: Failed to geocode ${loc.address}. Setting to Ljubljana default.")
                     loc.lat = 46.056947
                     loc.lng = 14.505751
                 }
             }
-            
+
             locationsFile.writeText(gson.toJson(locations))
             println("Locations saved to cache.")
         }
@@ -222,14 +222,14 @@ class RealWorldTSP {
             durMatrix = gson.fromJson(durationsFile.readText(), Array<DoubleArray>::class.java)
         } else {
             println("Cache not found. Calculating matrices...")
-            
+
             val apiKey = Secrets.getGoogleApiKey() ?: ""
             val matrixService = if (useRealApis && apiKey.isNotEmpty()) GoogleDistanceMatrixService(apiKey) else HaversineDistanceService()
 
             val matrices = matrixService.getFullMatrices(locations)
             distMatrix = matrices.first
             durMatrix = matrices.second
-            
+
             distancesFile.writeText(gson.toJson(distMatrix))
             durationsFile.writeText(gson.toJson(durationsFile))
             println("Matrices saved to cache.")

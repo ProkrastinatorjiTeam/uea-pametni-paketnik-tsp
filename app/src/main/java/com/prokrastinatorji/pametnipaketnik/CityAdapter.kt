@@ -7,14 +7,27 @@ import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.google.gson.annotations.SerializedName
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
 data class City(
+    @SerializedName("name")
     val name: String,
-    val latitude: Double,
-    val longitude: Double,
-    var isSelected: Boolean = true
+
+    @SerializedName("address")
+    val address: String,
+
+    @SerializedName("description")
+    val description: String,
+
+    @SerializedName("lat")
+    var latitude: Double,
+
+    @SerializedName("lng")
+    var longitude: Double,
+
+    var isSelected: Boolean = false
 ) : Parcelable
 
 class CityAdapter(private val cities: List<City>) : RecyclerView.Adapter<CityAdapter.CityViewHolder>() {
@@ -26,15 +39,10 @@ class CityAdapter(private val cities: List<City>) : RecyclerView.Adapter<CityAda
 
     override fun onBindViewHolder(holder: CityViewHolder, position: Int) {
         val city = cities[position]
-        holder.cityName.text = city.name
+        holder.cityName.text = "${city.name}, ${city.address}"
 
-        // Prevent listener from firing during binding
         holder.cityCheckBox.setOnCheckedChangeListener(null)
-
-        // Set the current state
         holder.cityCheckBox.isChecked = city.isSelected
-
-        // Set the new listener to update the model
         holder.cityCheckBox.setOnCheckedChangeListener { _, isChecked ->
             city.isSelected = isChecked
         }

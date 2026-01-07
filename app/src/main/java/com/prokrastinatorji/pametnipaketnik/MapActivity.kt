@@ -19,19 +19,17 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var mMap: GoogleMap
     private lateinit var textViewResult: TextView
     private var optimizedRoute: ArrayList<City>? = null
-    private var totalDistance: Double = 0.0
+    private var totalValue: Double = 0.0
     private var isTimeOptimization: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_map)
 
-        // Get data from Intent
         optimizedRoute = intent.getParcelableArrayListExtra("optimized_route")
-        totalDistance = intent.getDoubleExtra("total_distance", 0.0)
+        totalValue = intent.getDoubleExtra("total_distance", 0.0)
         isTimeOptimization = intent.getBooleanExtra("is_time_optimization", false)
 
-        // Initialize views
         textViewResult = findViewById(R.id.textViewResult)
 
         val mapFragment = supportFragmentManager
@@ -55,7 +53,7 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
 
         for (city in route) {
             val location = LatLng(city.latitude, city.longitude)
-            mMap.addMarker(MarkerOptions().position(location).title(city.name))
+            mMap.addMarker(MarkerOptions().position(location).title("${city.name}, ${city.address}"))
             boundsBuilder.include(location)
             polylineOptions.add(location)
         }
@@ -77,13 +75,13 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun displayResult() {
-        val label = if (isTimeOptimization) "Skupni čas" else "Skupna dolžina"
-        // The distance from the algorithm is based on Euclidean distance of coordinates,
-        // which is not in km. We display it as a raw value.
-        // To get real km, Haversine formula should be used in the core TSP problem.
-        val unit = if (isTimeOptimization) "enot časa" else "enot razdalje"
-        
-        val resultText = String.format(Locale.getDefault(), "%s: %.2f %s", label, totalDistance, unit)
+        val resultText = if (isTimeOptimization) {
+            val minutes = totalValue / 60
+            String.format(Locale.getDefault(), "Skupni čas: %.0f min", minutes)
+        } else {
+            val kilometers = totalValue / 1000
+            String.format(Locale.getDefault(), "Skupna dolžina: %.2f km", kilometers)
+        }
         textViewResult.text = resultText
     }
 }

@@ -12,42 +12,56 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputEditText
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.prokrastinatorji.core.GA
 import com.prokrastinatorji.core.TSP
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.InputStreamReader
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var recyclerViewCities: RecyclerView
     private lateinit var cityAdapter: CityAdapter
     private lateinit var progressBar: ProgressBar
-    private val cities = mutableListOf<City>()
+    private lateinit var buttonStart: Button
+    private lateinit var buttonSelectAll: Button
+
+    private val allCities = mutableListOf<City>()
+    private var distanceMatrix: Array<DoubleArray>? = null
+    private var durationMatrix: Array<DoubleArray>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Initialize views
         recyclerViewCities = findViewById(R.id.recyclerViewCities)
         progressBar = findViewById(R.id.progressBar)
-        val buttonStart = findViewById<Button>(R.id.buttonStart)
+        buttonStart = findViewById(R.id.buttonStart)
+        buttonSelectAll = findViewById(R.id.buttonSelectAll)
         val editTextPopulationSize = findViewById<TextInputEditText>(R.id.editTextPopulationSize)
         val editTextCrossover = findViewById<TextInputEditText>(R.id.editTextCrossover)
         val editTextMutation = findViewById<TextInputEditText>(R.id.editTextMutation)
         val radioTime = findViewById<RadioButton>(R.id.radioButtonTime)
 
+        loadDataFromAssets()
 
-        // Setup RecyclerView
         recyclerViewCities.layoutManager = LinearLayoutManager(this)
-        cities.addAll(getDummyCities())
-        cityAdapter = CityAdapter(cities)
+        cityAdapter = CityAdapter(allCities)
         recyclerViewCities.adapter = cityAdapter
 
-        // Set button click listener
+        buttonSelectAll.setOnClickListener {
+            val allSelected = allCities.all { it.isSelected }
+            val newState = !allSelected
+            allCities.forEach { it.isSelected = newState }
+            cityAdapter.notifyDataSetChanged()
+            buttonSelectAll.text = if (newState) "Počisti vse" else "Izberi vse"
+        }
+
         buttonStart.setOnClickListener {
-            val selectedCities = cities.filter { it.isSelected }
+            val selectedCities = allCities.filter { it.isSelected }
             if (selectedCities.isEmpty()) {
                 Toast.makeText(this, "Izberite vsaj eno mesto.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -58,49 +72,40 @@ class MainActivity : AppCompatActivity() {
             val mutationProbability = editTextMutation.text.toString().toDoubleOrNull() ?: 0.1
             val isOptimizingTime = radioTime.isChecked
 
-            // Show progress bar and start algorithm in background
-            progressBar.visibility = View.VISIBLE
-            buttonStart.isEnabled = false
+            setUiEnabled(false)
 
             lifecycleScope.launch(Dispatchers.IO) {
-                // --- Real algorithm execution ---
 
-                // 1. Manually create and configure the TSP problem
+                val selectedIndices = selectedCities.map { allCities.indexOf(it) }
+                val sourceMatrix = if (isOptimizingTime) durationMatrix else distanceMatrix
+                val subMatrix = Array(selectedCities.size) { i ->
+                    DoubleArray(selectedCities.size) { j ->
+                        sourceMatrix?.get(selectedIndices[i])?.get(selectedIndices[j]) ?: 0.0
+                    }
+                }
+
                 val tspProblem = TSP()
                 tspProblem.maxEvaluations = 1000 * selectedCities.size
                 tspProblem.numberOfCities = selectedCities.size
-                tspProblem.distanceType = TSP.DistanceType.EUCLIDEAN
-
-                selectedCities.forEachIndexed { index, appCity ->
-                    val coreCity = TSP.City(
-                        id = index + 1,
-                        x = appCity.longitude,
-                        y = appCity.latitude
-                    )
-                    tspProblem.cities.add(coreCity)
+                tspProblem.distanceType = TSP.DistanceType.WEIGHTED
+                tspProblem.weights = subMatrix
+                
+                selectedCities.forEachIndexed { index, _ ->
+                    tspProblem.cities.add(TSP.City(id = index + 1))
                 }
                 if (tspProblem.cities.isNotEmpty()) {
                     tspProblem.start = tspProblem.cities[0]
                 }
 
-                // 2. Initialize and run the evolutionary algorithm
                 val algorithm = GA(populationSize, crossoverProbability, mutationProbability)
                 val resultTour = algorithm.execute(tspProblem)
 
-                // 3. Convert the result back to a list of app-level City objects
-                val optimizedRoute = resultTour.path.map { coreCity ->
-                    selectedCities.first { appCity ->
-                        appCity.longitude == coreCity.x && appCity.latitude == coreCity.y
-                    }
+               val optimizedRoute = resultTour.path.map { coreCity ->
+                    selectedCities[coreCity.id - 1]
                 }
-                // --- End of real execution ---
 
-                // Switch back to the main thread to update UI
                 withContext(Dispatchers.Main) {
-                    progressBar.visibility = View.GONE
-                    buttonStart.isEnabled = true
-
-                    // Start MapActivity with the optimized route and result
+                    setUiEnabled(true)
                     val intent = Intent(this@MainActivity, MapActivity::class.java).apply {
                         putParcelableArrayListExtra("optimized_route", ArrayList(optimizedRoute))
                         putExtra("total_distance", resultTour.distance)
@@ -112,13 +117,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun getDummyCities(): List<City> {
-        return listOf(
-            City("Ljubljana", 46.0569, 14.5058),
-            City("Maribor", 46.5547, 15.6467),
-            City("Celje", 46.2389, 15.2674),
-            City("Kranj", 46.2389, 14.3556),
-            City("Koper", 45.5469, 13.7295)
-        )
+    private fun loadDataFromAssets() {
+        val gson = Gson()
+        try {
+            assets.open("locations.json").use { inputStream ->
+                val listType = object : TypeToken<List<City>>() {}.type
+                val loadedCities: List<City> = gson.fromJson(InputStreamReader(inputStream), listType)
+                allCities.clear()
+                allCities.addAll(loadedCities)
+                allCities.forEach { it.isSelected = false }
+            }
+
+            assets.open("distances.json").use { inputStream ->
+                distanceMatrix = gson.fromJson(InputStreamReader(inputStream), Array<DoubleArray>::class.java)
+            }
+
+            assets.open("durations.json").use { inputStream ->
+                durationMatrix = gson.fromJson(InputStreamReader(inputStream), Array<DoubleArray>::class.java)
+            }
+
+            Toast.makeText(this, "Podatki uspešno naloženi.", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Napaka pri nalaganju podatkov iz assets! Preverite Logcat.", Toast.LENGTH_LONG).show()
+            allCities.clear()
+            allCities.add(City("Napaka", "Napaka", "", 0.0, 0.0))
+        }
+    }
+
+    private fun setUiEnabled(isEnabled: Boolean) {
+        progressBar.visibility = if (isEnabled) View.GONE else View.VISIBLE
+        buttonStart.isEnabled = isEnabled
+        buttonSelectAll.isEnabled = isEnabled
     }
 }
